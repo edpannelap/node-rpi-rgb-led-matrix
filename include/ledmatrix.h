@@ -2,7 +2,7 @@
  *	Copyright 2016, Maxime Journaux <journaux.maxime@gmail.com>
  * 	This work is free. You can redistribute it and/or modify it under the
  *	terms of the Do What The Fuck You Want To Public License, Version 2,
- *	as published by Sam Hocevar. 
+ *	as published by Sam Hocevar.
  *	See http://www.wtfpl.net for more details.
  */
 
@@ -13,6 +13,7 @@
 #include <node_object_wrap.h>
 #include <nan.h>
 #include <led-matrix.h>
+#include <graphics.h>
 #include <image.h>
 
 using namespace rgb_matrix;
@@ -42,6 +43,10 @@ class LedMatrix : public node::ObjectWrap {
 		void Draw(int screenx, int screeny, int width, int height, int imgx, int imgy,
 					bool looph, bool loopv);
 
+		void DrawText(int x, int y, uint8_t r, uint8_t g, uint8_t b, int brightness, int font_id, std::string &t);
+		void SetFont(std::string &fontfile,int i);
+
+
 	protected:
 		LedMatrix(int rows = 16, int chained_displays = 1, int parallel_displays = 1);
 
@@ -60,6 +65,8 @@ class LedMatrix : public node::ObjectWrap {
 		static void Scroll(const Nan::FunctionCallbackInfo<v8::Value>& args);
 		static void UV_Scroll(uv_work_t* work);
 		static void UV_AfterScroll(uv_work_t* work, int status);
+		static void DrawText(const Nan::FunctionCallbackInfo<v8::Value>& args);
+		static void SetFont(const Nan::FunctionCallbackInfo<v8::Value>& args);
 
 	private:
 
@@ -67,6 +74,10 @@ class LedMatrix : public node::ObjectWrap {
 		RGBMatrix* matrix;
 
 		Image* image;
+	  rgb_matrix::Font font[10];
+	  std::string bdf_font_file;
+
+    rgb_matrix::RGBMatrix::Options options;
 
 		struct uvscroll {
 			LedMatrix* matrix;

@@ -2,7 +2,7 @@
  *	Copyright 2016, Maxime Journaux <journaux.maxime@gmail.com>
  * 	This work is free. You can redistribute it and/or modify it under the
  *	terms of the Do What The Fuck You Want To Public License, Version 2,
- *	as published by Sam Hocevar. 
+ *	as published by Sam Hocevar.
  *	See http://www.wtfpl.net for more details.
  */
 
@@ -14,6 +14,7 @@
 
 #include <led-matrix.h>
 #include <ledmatrix.h>
+#include <graphics.h>
 
 using namespace v8;
 using namespace node;
@@ -24,7 +25,11 @@ Nan::Persistent<v8::Function> LedMatrix::constructor;
 
 LedMatrix::LedMatrix(int rows, int chained_displays, int parallel_displays) {
 	assert(io.Init());
-	matrix = new RGBMatrix(&io, rows, chained_displays, parallel_displays);	
+	options.hardware_mapping = "adafruit-hat";
+	options.rows = rows;
+	options.chain_length = chained_displays;
+	options.parallel = parallel_displays;
+	matrix = new RGBMatrix(&io, options);
 	matrix->set_luminance_correct(true);
 	image = NULL;
 }
@@ -37,9 +42,9 @@ LedMatrix::~LedMatrix() {
 void LedMatrix::Init(v8::Local<v8::Object> exports) {
 
 	Nan::HandleScope scope;
-	
+
 	v8::Local<v8::FunctionTemplate> tpl = Nan::New<v8::FunctionTemplate>(New);
-	
+
 	tpl->SetClassName(Nan::New("LedMatrix").ToLocalChecked());
 	tpl->InstanceTemplate()->SetInternalFieldCount(1);
 
@@ -51,7 +56,10 @@ void LedMatrix::Init(v8::Local<v8::Object> exports) {
 	Nan::SetPrototypeMethod(tpl, "setImageBuffer", SetImageBuffer);
 	Nan::SetPrototypeMethod(tpl, "draw", Draw);
 	Nan::SetPrototypeMethod(tpl, "scroll", Scroll);
-	
+  Nan::SetPrototypeMethod(tpl, "drawText", DrawText);
+  Nan::SetPrototypeMethod(tpl, "setFont", SetFont);
+
+
 	constructor.Reset(tpl->GetFunction());
 
 	exports->Set(Nan::New("LedMatrix").ToLocalChecked(), tpl->GetFunction());
@@ -67,6 +75,57 @@ int LedMatrix::GetHeight() {
 
 void LedMatrix::SetPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
 	matrix->SetPixel(x, y, r, g, b);
+}
+
+
+void LedMatrix::SetFont(std::string &fontfile, int font_id) {
+
+	// printf("Font id: %i\n", font_id);
+	if (!(font_id<10) || !(font_id>=0)){
+		Nan::ThrowError("LedMatrix::font id not 0 .. 9");
+	}
+
+	if (!font[font_id].LoadFont(fontfile.c_str())) {
+		Nan::ThrowError("LedMatrix::cannot load font");
+	}
+}
+
+void LedMatrix::DrawText(int x, int y, uint8_t r, uint8_t g, uint8_t b, int brightness, int font_id, std::string &t) {
+	const Color color(r, g, b);
+
+	matrix->SetBrightness(brightness);
+
+	if (!(font_id<10) || !(font_id>=0)){
+		Nan::ThrowError("LedMatrix::font id not 0 .. 9");
+	}
+
+	// printf("Font compair '%s' <=> '%s'\n", bdf_font_file.c_str(), fontfile);
+
+	//	if ( bdf_font_file != fontfile ) {
+	// load the fontfile
+	// printf("New font detected '%s' is not '%s'\n", bdf_font_file.c_str(), fontfile.c_str());
+
+	//		bdf_font_file = fontfile;
+
+	//		if (!font[0].LoadFont(bdf_font_file.c_str())) {
+	//			Nan::ThrowError("LedMatrix::cannot load font");
+	//		}
+	//		else {
+	//			printf("Loaded new font: %s\n", bdf_font_file.c_str());
+	//		}
+	//	}
+
+ //printf("Font result '%s' == '%s'\n", bdf_font_file, fontfile);
+
+	bool all_extreme_colors = brightness == 100;
+	all_extreme_colors &= color.r == 0 || color.r == 255;
+	all_extreme_colors &= color.g == 0 || color.g == 255;
+	all_extreme_colors &= color.b == 0 || color.b == 255;
+	if (all_extreme_colors) {
+		matrix->SetPWMBits(1);
+	}
+
+	rgb_matrix::DrawText(matrix,font[font_id],x,y,color,std::string(t).c_str());
 }
 
 void LedMatrix::Clear() {
@@ -118,10 +177,10 @@ void LedMatrix::Draw(int screenx, int screeny, int width, int height, int imgx, 
 			matrix->SetPixel(sx, sy, p.R(), p.G(), p.B());
 		}
 	}
-}	
+}
 
 void LedMatrix::New(const Nan::FunctionCallbackInfo<Value>& args) {
-	// throw an error if it's not a constructor 
+	// throw an error if it's not a constructor
 	if (!args.IsConstructCall()) {
 		Nan::ThrowError("LedMatrix::must be called as a constructor with 'new' keyword");
 	}
@@ -174,6 +233,46 @@ void LedMatrix::SetPixel(const Nan::FunctionCallbackInfo<v8::Value>& args) {
   	int b = args[4]->ToInteger()->Value();
 
   	matrix->SetPixel(x, y, r, g, b);
+}
+
+void LedMatrix::SetFont(const Nan::FunctionCallbackInfo<v8::Value>& args) {
+	LedMatrix* matrix = ObjectWrap::Unwrap<LedMatrix>(args.Holder());
+
+	if(!args.Length() == 2 || !args[0]->IsString() || !args[1]->IsNumber() ) {
+			Nan::ThrowTypeError("Wrong parameters! Expects fontfile name, and id 0..9");
+	}
+
+	v8::String::Utf8Value const theFontFile(args[0]);
+	std::string fontfile = std::string(*theFontFile).c_str();
+  int i = args[1]->ToInteger()->Value();
+
+  matrix->SetFont(fontfile,i);
+}
+
+
+void LedMatrix::DrawText(const Nan::FunctionCallbackInfo<v8::Value>& args) {
+    LedMatrix* matrix = ObjectWrap::Unwrap<LedMatrix>(args.Holder());
+
+    if(!args.Length() == 7 || !args[0]->IsNumber() || !args[1]->IsNumber() || !args[2]->IsNumber()
+	|| !args[3]->IsNumber() || !args[4]->IsNumber() || !args[5]->IsNumber()  || !args[6]->IsNumber() || !args[7]->IsString()) {
+        Nan::ThrowTypeError("Wrong parameters! Expects integer x, integer y, red, green, blue, brightness, font_id, and text");
+    }
+
+    int x = args[0]->ToInteger()->Value();
+    int y = args[1]->ToInteger()->Value();
+  	int r = args[2]->ToInteger()->Value();
+  	int g = args[3]->ToInteger()->Value();
+  	int b = args[4]->ToInteger()->Value();
+  	int brightness = args[5]->ToInteger()->Value();
+  	int font_id = args[6]->ToInteger()->Value();
+
+//    v8::String::Utf8Value const theFontFile(args[6]);
+//    std::string fontfile = std::string(*theFontFile).c_str();
+
+    v8::String::Utf8Value const theText(args[7]);
+    std::string t = std::string(*theText).c_str();
+
+    matrix->DrawText(x,y,r,g,b,brightness,font_id,t);
 }
 
 void LedMatrix::Clear(const Nan::FunctionCallbackInfo<v8::Value>& args) {
@@ -359,7 +458,7 @@ void LedMatrix::UV_Scroll(uv_work_t* work) {
 					usleep(uv->speed);
 				}
 				uv->matrix->Clear(uv->startx, uv->starty, uv->width, uv->height);
-				uv->matrix->Draw(uv->startx, uv->starty, uv->width, uv->height, 0, 0, false, true);	
+				uv->matrix->Draw(uv->startx, uv->starty, uv->width, uv->height, 0, 0, false, true);
 			}
 		} else {
 			for(int i = 0; i < uv->matrix->image->GetHeight(); i++) {

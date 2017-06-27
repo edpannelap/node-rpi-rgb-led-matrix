@@ -12,7 +12,10 @@
 			"sources": ["external/matrix/lib/bdf-font.cc",
 				"external/matrix/lib/framebuffer.cc", "external/matrix/lib/gpio.cc",
 				"external/matrix/lib/graphics.cc", "external/matrix/lib/led-matrix.cc",
-				"external/matrix/lib/thread.cc"],
+				"external/matrix/lib/hardware-mapping.c",
+				"external/matrix/lib/options-initialize.cc",
+				"external/matrix/lib/thread.cc"
+				],
 			"libraries": ["-lrt", "-lm", "-lpthread"],
 			"include_dirs": [ "external/matrix/include" ],
 	        "direct_dependent_settings": {
